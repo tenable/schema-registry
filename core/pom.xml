@@ -38,10 +38,12 @@
         <dependency>
             <groupId>io.confluent</groupId>
             <artifactId>common-config</artifactId>
+            <version>${io.confluent.common.version}</version>
         </dependency>
         <dependency>
             <groupId>io.confluent</groupId>
             <artifactId>common-utils</artifactId>
+            <version>${io.confluent.common.version}</version>
         </dependency>
         <dependency>
             <groupId>org.glassfish.jersey.ext</groupId>
@@ -50,6 +52,7 @@
         <dependency>
             <groupId>io.confluent</groupId>
             <artifactId>rest-utils</artifactId>
+            <version>${io.confluent.rest-utils.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

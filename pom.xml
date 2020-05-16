@@ -81,6 +81,7 @@
         <protobuf.version>3.11.4</protobuf.version>
         <wire.version>3.1.0</wire.version>
         <spotbugs.plugin.version>4.0.0</spotbugs.plugin.version>
+        <io.confluent.rest-utils.version>${parent.project.version}</io.confluent.rest-utils.version>
     </properties>
 
     <repositories>

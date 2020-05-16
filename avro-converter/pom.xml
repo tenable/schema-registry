@@ -52,6 +52,7 @@
         <dependency>
             <groupId>io.confluent</groupId>
             <artifactId>common-config</artifactId>
+            <version>${io.confluent.common.version}</version>
         </dependency>
 
         <dependency>
