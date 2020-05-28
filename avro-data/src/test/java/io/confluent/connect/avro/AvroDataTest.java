@@ -247,7 +247,6 @@ public class AvroDataTest {
   }
 
   @Test
-  @Ignore
   public void testUnionRecordDefaultValueConversion() {
     org.apache.avro.Schema defaultFieldSchema = org.apache.avro.SchemaBuilder
             .record("A").fields().name("a").type().intType().noDefault().endRecord();

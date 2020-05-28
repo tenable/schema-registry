@@ -28,7 +28,6 @@ import org.apache.avro.generic.GenericFixed;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.generic.GenericRecordBuilder;
 import org.apache.avro.generic.IndexedRecord;
-import org.apache.avro.util.internal.JacksonUtils;
 import org.apache.kafka.common.cache.Cache;
 import org.apache.kafka.common.cache.LRUCache;
 import org.apache.kafka.common.cache.SynchronizedCache;
@@ -44,10 +43,8 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1093,8 +1090,13 @@ public class AvroData {
           map.put(field.name(), defaultValueToConnect(field.schema(), object));
         }
       }
-      // union default: first branch
-      defaultVal = map.entrySet().iterator().next().getValue();
+
+      // If this is a union, Avro only allows the first branch to be the default
+      if (AVRO_TYPE_UNION.equals(fieldSchema.name())) {
+        defaultVal = map.values().iterator().next();
+      } else {
+        defaultVal = map;
+      }
     }
     return defaultVal;
   }
@@ -1492,6 +1494,7 @@ public class AvroData {
               valueRecordSchema = toConnectSchemaWithCycles(
                   valueRecord.getSchema(), true, null, null, toConnectContext);
             }
+
             for (Field field : schema.fields()) {
               Schema fieldSchema = field.schema();
 
@@ -1840,7 +1843,7 @@ public class AvroData {
     }
 
     if (fieldDefaultVal == null) {
-      fieldDefaultVal = JacksonUtils.toJsonNode(schema.getObjectProp(CONNECT_DEFAULT_VALUE_PROP));
+      fieldDefaultVal = schema.getObjectProp(CONNECT_DEFAULT_VALUE_PROP);
     }
     if (fieldDefaultVal != null) {
       Object value = defaultValueFromAvro(builder, schema, fieldDefaultVal, toConnectContext);
@@ -1925,98 +1928,70 @@ public class AvroData {
       return null;
     }
 
-    // The type will be JsonNode if this default was pulled from a Connect default field, or an
-    // Object if it's the actual Avro-specified default. If it's a regular Java object, we can
-    // use our existing conversion tools.
-    if (!(value instanceof JsonNode)) {
-      return toConnectData(schema, value, toConnectContext, false);
-    }
-
-    JsonNode jsonValue = (JsonNode) value;
     switch (avroSchema.getType()) {
       case INT:
         if (schema.type() == Schema.Type.INT8) {
-          return (byte) jsonValue.intValue();
+          return (byte) ((Number) value).intValue();
+
         } else if (schema.type() == Schema.Type.INT16) {
-          return jsonValue.shortValue();
+          return ((Number) value).shortValue();
         } else if (schema.type() == Schema.Type.INT32) {
-          return jsonValue.intValue();
+          return ((Number) value).intValue();
         } else {
-          break;
+          throw new IllegalArgumentException("Unsupported schema type " + schema.type().getName());
         }
 
       case LONG:
-        return jsonValue.longValue();
+        return ((Number) value).longValue();
 
       case FLOAT:
-        return (float) jsonValue.doubleValue();
+        return ((Number) value).floatValue();
+
       case DOUBLE:
-        return jsonValue.doubleValue();
+        return ((Number) value).doubleValue();
 
       case BOOLEAN:
-        return jsonValue.asBoolean();
+      case ENUM:
+        return value;
 
       case NULL:
         return null;
 
-      case STRING:
-      case ENUM:
-        return jsonValue.asText();
-
       case BYTES:
       case FIXED:
-        try {
-          byte[] bytes;
-          if (jsonValue.isTextual()) {
-            // Avro's JSON form may be a quoted string, so decode the binary value
-            String encoded = jsonValue.textValue();
-            bytes = encoded.getBytes(StandardCharsets.ISO_8859_1);
-          } else {
-            bytes = jsonValue.binaryValue();
-          }
-          return bytes == null ? null : ByteBuffer.wrap(bytes);
-        } catch (IOException e) {
-          throw new DataException("Invalid binary data in default value", e);
-        }
+        return ByteBuffer.wrap((byte[]) value);
 
       case ARRAY: {
-        if (!jsonValue.isArray()) {
-          throw new DataException("Invalid JSON for array default value: " + jsonValue.toString());
-        }
-        List<Object> result = new ArrayList<>(jsonValue.size());
-        for (JsonNode elem : jsonValue) {
+        List<Object> original = (List<Object>) value;
+        List<Object> result = new ArrayList<>(original.size());
+        for (Object elem : original) {
           result.add(
-              defaultValueFromAvro(schema, avroSchema.getElementType(), elem, toConnectContext));
+              defaultValueFromAvro(schema.valueSchema(), avroSchema.getElementType(), elem,
+                      toConnectContext));
         }
         return result;
       }
 
       case MAP: {
-        if (!jsonValue.isObject()) {
-          throw new DataException("Invalid JSON for map default value: " + jsonValue.toString());
-        }
-        Map<String, Object> result = new HashMap<>(jsonValue.size());
-        Iterator<Map.Entry<String, JsonNode>> fieldIt = jsonValue.fields();
-        while (fieldIt.hasNext()) {
-          Map.Entry<String, JsonNode> field = fieldIt.next();
+        Map<String, Object> original = (Map<String, Object>) value;
+        Map<String, Object> result = new HashMap<>(original.size());
+        for (Map.Entry<String, Object> field : original.entrySet()) {
           Object converted = defaultValueFromAvro(
-              schema.valueSchema(), avroSchema.getValueType(), field.getValue(), toConnectContext);
+                  schema.valueSchema(), avroSchema.getValueType(), field.getValue(),
+                  toConnectContext);
           result.put(field.getKey(), converted);
         }
         return result;
       }
 
       case RECORD: {
-        if (!jsonValue.isObject()) {
-          throw new DataException("Invalid JSON for record default value: " + jsonValue.toString());
-        }
-
+        Map<String, Object> original = (Map<String, Object>) value;
         Struct result = new Struct(schema);
         for (org.apache.avro.Schema.Field avroField : avroSchema.getFields()) {
           Field field = schema.field(avroField.name());
-          JsonNode fieldJson = ((JsonNode) value).get(field.name());
+          Object fieldValue = original.get(field.name());
           Object converted = defaultValueFromAvro(
-              field.schema(), avroField.schema(), fieldJson, toConnectContext);
+              field.schema(), avroField.schema(), fieldValue, toConnectContext);
           result.put(avroField.name(), converted);
         }
         return result;
@@ -2038,10 +2013,9 @@ public class AvroData {
         }
       }
       default: {
-        return null;
+        return toConnectData(schema, value, toConnectContext, false);
       }
     }
-    return null;
   }
 
 
