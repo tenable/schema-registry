@@ -1092,7 +1092,8 @@ public class AvroData {
       }
 
       // If this is a union, Avro only allows the first branch to be the default
-      if (AVRO_TYPE_UNION.equals(fieldSchema.name())) {
+      if (fieldSchema != null && AVRO_TYPE_UNION.equals(fieldSchema.name())
+              && !map.values().isEmpty()) {
         defaultVal = map.values().iterator().next();
       } else {
         defaultVal = map;
