@@ -690,6 +690,8 @@ public class AvroData {
       return Schema.Type.ARRAY;
     } else if (value instanceof Map) {
       return Schema.Type.MAP;
+    } else if (value instanceof Struct) {
+      return Schema.Type.STRUCT;
     } else {
       throw new DataException("Unknown Java type for schemaless data: " + value.getClass());
     }
