@@ -19,7 +19,7 @@
     -->
     <maven.plugins.version>3.0.0-M1</maven.plugins.version>
     <junit.version>4.12</junit.version>
-    <jmh.version>1.21</jmh.version>
+    <jmh.version>1.36</jmh.version>
   </properties>
 
   <dependencies>
